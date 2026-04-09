@@ -5,11 +5,16 @@ const cloudinary = require('../config/cloudinary');
 const storage = new CloudinaryStorage({
   cloudinary,
   params: async (req, file) => {
+    const ext = file.originalname.split('.').pop();
+    const baseName = file.originalname.split('.')[0].replace(/[^a-zA-Z0-9]/g, '_');
+
+    const isPdf = ext.toLowerCase() === 'pdf';
+
     return {
       folder: 'job-platform',
-      resource_type: 'auto', // important for pdf + images
-      format: file.mimetype.split('/')[1],
-      public_id: file.originalname.split('.')[0],
+      resource_type: isPdf ? 'image' : 'auto', // 'image' allows Cloudinary to serve PDFs without 401 restrictions
+      public_id: `${baseName}_${Date.now()}`,
+      format: isPdf ? 'pdf' : ext,
     };
   },
 });

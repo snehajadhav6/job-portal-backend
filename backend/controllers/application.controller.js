@@ -7,7 +7,16 @@ const sendEmail = require('../utils/sendEmail');
 const applyForJob = async (req, res) => {
   try {
     const { job_id, cover_letter, college_name, cgpa, willing_to_relocate, experience_years } = req.body;
-    const resume_url = req.file ? req.file.path : null;
+
+    // ✅ Ensure resume is uploaded
+    if (!req.file) {
+      return res.status(400).json({ message: "Resume is required" });
+    }
+
+    console.log("Uploaded File:", req.file);
+
+    // Use the Cloudinary URL
+    const resume_url = req.file.path;
 
     // Check if already applied
     const existingApplication = await Application.findByUserAndJob(req.user.id, job_id);
@@ -19,15 +28,20 @@ const applyForJob = async (req, res) => {
       job_id,
       user_id: req.user.id,
       cover_letter,
-      resume_url,
+      resume_url, // ✅ fixed URL
       college_name,
       cgpa: cgpa ? parseFloat(cgpa) : null,
       willing_to_relocate: willing_to_relocate === 'true' || willing_to_relocate === true,
       experience_years: experience_years ? parseInt(experience_years) : 0,
     });
 
-    res.status(201).json({ message: 'Application submitted successfully', applicationId });
+    res.status(201).json({
+      message: 'Application submitted successfully',
+      applicationId
+    });
+
   } catch (error) {
+    console.error("Apply Job Error:", error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
