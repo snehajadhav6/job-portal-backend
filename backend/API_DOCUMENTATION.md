@@ -15,7 +15,7 @@ Used by candidates to submit their application. The backend halts until Mistral-
 ```javascript
 // Form-Data
 job_id: 1                       // (Required) Integer
-resume: File                    // (Required) Valid PDF File
+resume: File                    // (Required) Valid PDF, JPG, or PNG string (Max: 5MB)
 cover_letter: "string"          // (Optional) Text
 college_name: "string"          // (Optional) Text
 cgpa: 3.8                       // (Optional) Decimal
