@@ -2,6 +2,12 @@
 const axios = require('axios');
 const pdfParseModule = require('pdf-parse');
 
+const DEFAULT_ATS_MODELS = [
+  'openai/gpt-oss-20b:free',
+  'openai/gpt-oss-120b:free',
+  'google/gemma-4-26b-a4b-it:free'
+];
+
 function clampScore(score) {
   const parsed = Number(score);
   if (!Number.isFinite(parsed)) return null;
@@ -97,15 +103,21 @@ async function evaluateResumeATS(resumeUrl, jobDescription) {
       return keywordOverlapScore(resumeText, jobDescription);
     }
 
-    const primaryModel = process.env.OPENROUTER_ATS_MODEL || 'openai/gpt-oss-20b:free';
-    const fallbackModel = process.env.OPENROUTER_ATS_FALLBACK_MODEL || 'google/gemma-4-31b-it:free';
-    const modelsToTry = [primaryModel, fallbackModel].filter(Boolean);
+    const requestedModel = process.env.OPENROUTER_ATS_MODEL;
+    const envFallbackModel = process.env.OPENROUTER_ATS_FALLBACK_MODEL;
+    const modelsToTry = [
+      ...(requestedModel ? [requestedModel] : []),
+      ...(envFallbackModel ? [envFallbackModel] : []),
+      ...DEFAULT_ATS_MODELS
+    ].filter((model, index, arr) => model && arr.indexOf(model) === index);
 
     for (const modelName of modelsToTry) {
       try {
         const payload = {
           model: modelName,
           temperature: 0,
+          max_tokens: 40,
+          response_format: { type: 'json_object' },
           messages: [
             {
               role: "system",
@@ -123,7 +135,7 @@ async function evaluateResumeATS(resumeUrl, jobDescription) {
             'Authorization': `Bearer ${openRouterKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: 45000
+          timeout: 20000
         });
 
         const content = aiResponse?.data?.choices?.[0]?.message?.content?.trim() || '';
