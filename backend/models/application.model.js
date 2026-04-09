@@ -2,13 +2,17 @@ const pool = require('../config/db');
 
 class Application {
   static async create(applicationData) {
-    const { job_id, user_id, cover_letter, resume_url, college_name, cgpa, willing_to_relocate, experience_years } = applicationData;
+    const { job_id, user_id, cover_letter, resume_url, college_name, cgpa, willing_to_relocate, experience_years, ats_score, status, test_status } = applicationData;
     const { rows } = await pool.query(
-      `INSERT INTO applications (job_id, user_id, cover_letter, resume_url, college_name, cgpa, willing_to_relocate, experience_years)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-      [job_id, user_id, cover_letter, resume_url, college_name || null, cgpa || null, willing_to_relocate || false, experience_years || 0]
+      `INSERT INTO applications (job_id, user_id, cover_letter, resume_url, college_name, cgpa, willing_to_relocate, experience_years, ats_score, status, test_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+      [job_id, user_id, cover_letter, resume_url, college_name || null, cgpa || null, willing_to_relocate || false, experience_years || 0, ats_score || null, status || 'applied', test_status || 'not_started']
     );
     return rows[0].id;
+  }
+
+  static async updateTestScore(id, testScore) {
+    await pool.query('UPDATE applications SET test_score = $1, test_status = $2, status = $3 WHERE id = $4', [testScore, 'completed', 'test_completed', id]);
   }
 
   static async findByUserAndJob(userId, jobId) {

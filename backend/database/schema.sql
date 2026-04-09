@@ -97,3 +97,9 @@ CREATE TABLE saved_jobs (
 -- ALTER TABLE applications ADD COLUMN IF NOT EXISTS cgpa DECIMAL(4,2);
 -- ALTER TABLE applications ADD COLUMN IF NOT EXISTS willing_to_relocate BOOLEAN DEFAULT FALSE;
 -- ALTER TABLE applications ADD COLUMN IF NOT EXISTS experience_years INT DEFAULT 0;
+-- Migration: ATS Automated Shortlisting
+-- ALTER TABLE applications ADD COLUMN IF NOT EXISTS ats_score DECIMAL(5,2);
+-- ALTER TABLE applications DROP CONSTRAINT IF EXISTS applications_status_check;
+-- ALTER TABLE applications ADD CONSTRAINT applications_status_check CHECK (status IN ('applied', 'shortlisted', 'interview', 'hired', 'rejected', 'test_completed', 'interview_ready'));
+-- ALTER TABLE applications ADD COLUMN IF NOT EXISTS test_status VARCHAR(20) DEFAULT 'not_started' CHECK (test_status IN ('not_started', 'sent', 'completed'));
+-- ALTER TABLE applications ADD COLUMN IF NOT EXISTS test_score DECIMAL(5,2);
