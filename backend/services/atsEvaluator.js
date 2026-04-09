@@ -1,6 +1,56 @@
 const axios = require('axios');
 const pdfParse = require('pdf-parse');
 
+function clampScore(score) {
+  const parsed = Number(score);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.min(100, Math.round(parsed)));
+}
+
+function extractScoreFromModelOutput(content) {
+  if (!content || typeof content !== 'string') return null;
+
+  // Prefer JSON response if model follows instruction.
+  try {
+    const parsed = JSON.parse(content);
+    if (typeof parsed === 'object' && parsed !== null && 'score' in parsed) {
+      return clampScore(parsed.score);
+    }
+  } catch (_) {
+    // Ignore JSON parse errors and continue with regex extraction.
+  }
+
+  const match = content.match(/(?:score|ats)[^\d]{0,20}(\d{1,3})/i) || content.match(/\b(\d{1,3})\b/);
+  if (!match) return null;
+  return clampScore(match[1]);
+}
+
+function normalizeTokens(text) {
+  if (!text || typeof text !== 'string') return [];
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((token) => token.length > 2);
+}
+
+function keywordOverlapScore(resumeText, jobDescription) {
+  const resumeTokens = normalizeTokens(resumeText);
+  const jobTokens = normalizeTokens(jobDescription);
+
+  if (!resumeTokens.length || !jobTokens.length) return 0;
+
+  const resumeSet = new Set(resumeTokens);
+  const jobSet = new Set(jobTokens);
+  const overlap = [...jobSet].filter((token) => resumeSet.has(token)).length;
+  const overlapRatio = overlap / jobSet.size;
+
+  // Weighted by resume length confidence to avoid inflated scores for tiny resumes.
+  const lengthConfidence = Math.min(1, resumeTokens.length / 250);
+  const raw = overlapRatio * 100 * (0.7 + 0.3 * lengthConfidence);
+  return clampScore(raw);
+}
+
 async function evaluateResumeATS(resumeUrl, jobDescription) {
   try {
     // 1. Fetch PDF from Cloudinary URL
@@ -13,7 +63,7 @@ async function evaluateResumeATS(resumeUrl, jobDescription) {
       resumeText = data.text;
     } catch (parseError) {
       console.error('Error parsing PDF:', parseError.message);
-      return Math.floor(Math.random() * 40) + 10; // Fallback score if PDF is unreadable (just illustrative, usually 0)
+      return 0;
     }
 
     if (!resumeText || resumeText.trim().length === 0) {
@@ -24,19 +74,21 @@ async function evaluateResumeATS(resumeUrl, jobDescription) {
     const openRouterKey = process.env.OPENROUTER_API_KEY;
     if (!openRouterKey) {
       console.warn("OPENROUTER_API_KEY is not set. Skipping real ATS evaluation.");
-      return 75; // Mock score if API key is not present so testing continues and hits shortlist state!
+      return keywordOverlapScore(resumeText, jobDescription);
     }
 
+    const modelName = process.env.OPENROUTER_ATS_MODEL || 'meta-llama/llama-3.3-70b-instruct:free';
     const payload = {
-      model: "mistralai/mistral-7b-instruct",
+      model: modelName,
+      temperature: 0,
       messages: [
         {
           role: "system",
-          content: "You are an expert ATS (Applicant Tracking System). Evaluate the resume against the provided job description. Reply ONLY with a single numeric integer score between 0 and 100 representing the match."
+          content: "You are an ATS evaluator. Return strict JSON only in this format: {\"score\": <integer 0-100>}. Do not include any extra text."
         },
         {
           role: "user",
-          content: `Job Description:\n${jobDescription}\n\nResume Information:\n${resumeText}\n\nATS Score (0-100):`
+          content: `Evaluate resume-to-job match quality.\n\nJob Description:\n${jobDescription}\n\nResume:\n${resumeText}`
         }
       ]
     };
@@ -48,21 +100,20 @@ async function evaluateResumeATS(resumeUrl, jobDescription) {
       }
     });
 
-    const content = aiResponse.data.choices[0].message.content.trim();
-    
-    // Extract first integer found in response
-    const match = content.match(/\d+/);
-    if (match) {
-        let score = parseInt(match[0], 10);
-        if (score > 100) score = 100;
-        if (score < 0) score = 0;
-        return score;
+    const content = aiResponse?.data?.choices?.[0]?.message?.content?.trim() || '';
+    const extractedScore = extractScoreFromModelOutput(content);
+    if (extractedScore !== null) {
+      return extractedScore;
     }
 
-    return 50; // default middle score
+    console.warn('Unable to parse ATS model response, using keyword-overlap fallback.');
+    return keywordOverlapScore(resumeText, jobDescription);
   } catch (err) {
     console.error('ATS Evaluation Error:', err.message);
-    return 50; // Fail-safe ATS score to allow application insertion
+    if (err.response?.data) {
+      console.error('ATS Evaluation Error (response):', JSON.stringify(err.response.data));
+    }
+    return 0;
   }
 }
 
