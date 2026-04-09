@@ -1,5 +1,6 @@
+
 const axios = require('axios');
-const pdfParse = require('pdf-parse');
+const pdfParseModule = require('pdf-parse');
 
 function clampScore(score) {
   const parsed = Number(score);
@@ -51,6 +52,26 @@ function keywordOverlapScore(resumeText, jobDescription) {
   return clampScore(raw);
 }
 
+async function extractPdfTextFromBuffer(buffer) {
+  // Support both old pdf-parse API (function export) and v2 API (PDFParse class).
+  if (typeof pdfParseModule === 'function') {
+    const data = await pdfParseModule(buffer);
+    return data?.text || '';
+  }
+
+  if (pdfParseModule && typeof pdfParseModule.PDFParse === 'function') {
+    const parser = new pdfParseModule.PDFParse({ data: buffer });
+    try {
+      const result = await parser.getText();
+      return result?.text || '';
+    } finally {
+      await parser.destroy();
+    }
+  }
+
+  throw new Error('Unsupported pdf-parse module export format');
+}
+
 async function evaluateResumeATS(resumeUrl, jobDescription) {
   try {
     // 1. Fetch PDF from Cloudinary URL
@@ -59,8 +80,7 @@ async function evaluateResumeATS(resumeUrl, jobDescription) {
     // 2. Extract text from PDF buffer
     let resumeText = '';
     try {
-      const data = await pdfParse(response.data);
-      resumeText = data.text;
+      resumeText = await extractPdfTextFromBuffer(response.data);
     } catch (parseError) {
       console.error('Error parsing PDF:', parseError.message);
       return 0;
@@ -77,33 +97,43 @@ async function evaluateResumeATS(resumeUrl, jobDescription) {
       return keywordOverlapScore(resumeText, jobDescription);
     }
 
-    const modelName = process.env.OPENROUTER_ATS_MODEL || 'meta-llama/llama-3.3-70b-instruct:free';
-    const payload = {
-      model: modelName,
-      temperature: 0,
-      messages: [
-        {
-          role: "system",
-          content: "You are an ATS evaluator. Return strict JSON only in this format: {\"score\": <integer 0-100>}. Do not include any extra text."
-        },
-        {
-          role: "user",
-          content: `Evaluate resume-to-job match quality.\n\nJob Description:\n${jobDescription}\n\nResume:\n${resumeText}`
+    const primaryModel = process.env.OPENROUTER_ATS_MODEL || 'openai/gpt-oss-20b:free';
+    const fallbackModel = process.env.OPENROUTER_ATS_FALLBACK_MODEL || 'google/gemma-4-31b-it:free';
+    const modelsToTry = [primaryModel, fallbackModel].filter(Boolean);
+
+    for (const modelName of modelsToTry) {
+      try {
+        const payload = {
+          model: modelName,
+          temperature: 0,
+          messages: [
+            {
+              role: "system",
+              content: "You are an ATS evaluator. Return strict JSON only in this format: {\"score\": <integer 0-100>}. Do not include any extra text."
+            },
+            {
+              role: "user",
+              content: `Evaluate resume-to-job match quality.\n\nJob Description:\n${jobDescription}\n\nResume:\n${resumeText}`
+            }
+          ]
+        };
+
+        const aiResponse = await axios.post('https://openrouter.ai/api/v1/chat/completions', payload, {
+          headers: {
+            'Authorization': `Bearer ${openRouterKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 45000
+        });
+
+        const content = aiResponse?.data?.choices?.[0]?.message?.content?.trim() || '';
+        const extractedScore = extractScoreFromModelOutput(content);
+        if (extractedScore !== null) {
+          return extractedScore;
         }
-      ]
-    };
-
-    const aiResponse = await axios.post('https://openrouter.ai/api/v1/chat/completions', payload, {
-      headers: {
-        'Authorization': `Bearer ${openRouterKey}`,
-        'Content-Type': 'application/json'
+      } catch (modelError) {
+        console.error(`ATS model failed (${modelName}):`, modelError.message);
       }
-    });
-
-    const content = aiResponse?.data?.choices?.[0]?.message?.content?.trim() || '';
-    const extractedScore = extractScoreFromModelOutput(content);
-    if (extractedScore !== null) {
-      return extractedScore;
     }
 
     console.warn('Unable to parse ATS model response, using keyword-overlap fallback.');
