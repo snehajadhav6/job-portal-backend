@@ -87,6 +87,27 @@ CREATE TABLE saved_jobs (
   FOREIGN KEY (job_id) REFERENCES jobs(id)
 );
 
+-- Interview links (secure tokens)
+CREATE TABLE interview_links (
+  id SERIAL PRIMARY KEY,
+  token TEXT UNIQUE NOT NULL,
+  user_id INT NOT NULL,
+  is_used BOOLEAN DEFAULT false,
+  expires_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Interview results (stored after interview app submission)
+CREATE TABLE interview_results (
+  id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL,
+  score INT,
+  feedback JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 -- Migration: Run these ALTER statements if the tables already exist
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS title VARCHAR(255);
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_url VARCHAR(255);
@@ -106,3 +127,9 @@ CREATE TABLE saved_jobs (
 -- ALTER TABLE applications ADD COLUMN IF NOT EXISTS interview_status VARCHAR(50) DEFAULT 'Not Scheduled';
 -- ALTER TABLE applications ADD COLUMN IF NOT EXISTS interview_link VARCHAR(500);
 -- ALTER TABLE applications ADD COLUMN IF NOT EXISTS interview_notified BOOLEAN DEFAULT FALSE;
+
+-- Migration: Interview tables (run safely on existing DBs)
+-- CREATE TABLE IF NOT EXISTS interview_links (id SERIAL PRIMARY KEY, token TEXT UNIQUE NOT NULL, user_id INT NOT NULL, is_used BOOLEAN DEFAULT false, expires_at TIMESTAMP, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id));
+-- CREATE INDEX IF NOT EXISTS interview_links_user_id_idx ON interview_links(user_id);
+-- CREATE TABLE IF NOT EXISTS interview_results (id SERIAL PRIMARY KEY, user_id INT NOT NULL, score INT, feedback JSONB, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id));
+-- CREATE INDEX IF NOT EXISTS interview_results_user_id_idx ON interview_results(user_id);

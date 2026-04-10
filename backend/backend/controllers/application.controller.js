@@ -3,6 +3,8 @@ const Job = require('../models/job.model');
 const Company = require('../models/company.model');
 const User = require('../models/user.model');
 const sendEmail = require('../utils/sendEmail');
+const InterviewLink = require('../models/interviewLink.model');
+const { sendInterviewSetupNotification } = require('../services/notificationService');
 const { extractResumeText } = require('../utils/resumeParser');
 const { extractResumeEntities } = require('../services/hfResumeExtractor');
 const { scoreResumeEntities } = require('../services/atsScoring');
@@ -179,8 +181,31 @@ const updateApplicationStatus = async (req, res) => {
 
     await Application.updateStatus(req.params.id, status);
 
-    // Send email notification
     const user = await User.findById(application.user_id);
+    // If manager marks as interview from Applicants Management, send secure unique link.
+    if (status === 'interview') {
+      const linkRow = await InterviewLink.createForUser(application.user_id);
+      const interviewLink = `http://localhost:5174/interview?token=${linkRow.token}`;
+
+      const companyName = company?.name || 'our company';
+      await sendInterviewSetupNotification(
+        user.id,
+        user.email,
+        user.name,
+        interviewLink,
+        job.title,
+        companyName,
+        company?.manager_id || req.user.id
+      );
+
+      return res.json({
+        message: 'Application status updated and interview link sent successfully',
+        interview_link: interviewLink,
+        expires_at: linkRow.expires_at
+      });
+    }
+
+    // Existing behavior for other statuses stays unchanged.
     const subject = `Application Status Update for ${job.title}`;
     const text = `Your application status has been updated to: ${status}`;
     await sendEmail(user.email, subject, text);

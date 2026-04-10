@@ -17,8 +17,13 @@ async function runMigrations() {
     let alterStatements = [];
 
     for (let line of migrationLines) {
-      if (line.startsWith('-- ALTER ')) {
-        // Uncomment the alter statements
+      if (
+        line.startsWith('-- ALTER ') ||
+        line.startsWith('-- CREATE TABLE ') ||
+        line.startsWith('-- CREATE INDEX ') ||
+        line.startsWith('-- CREATE UNIQUE INDEX ')
+      ) {
+        // Uncomment the migration statements
         alterStatements.push(line.replace(/^--\s*/, ''));
       } else {
         createTableSql += line + '\n';
