@@ -133,3 +133,19 @@ CREATE TABLE interview_results (
 -- CREATE INDEX IF NOT EXISTS interview_links_user_id_idx ON interview_links(user_id);
 -- CREATE TABLE IF NOT EXISTS interview_results (id SERIAL PRIMARY KEY, user_id INT NOT NULL, score INT, feedback JSONB, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id));
 -- CREATE INDEX IF NOT EXISTS interview_results_user_id_idx ON interview_results(user_id);
+
+-- Migration: Live Proctoring Tables
+-- CREATE TABLE IF NOT EXISTS interview_sessions (id SERIAL PRIMARY KEY, candidate_id INT NOT NULL, status VARCHAR(20) CHECK (status IN ('ACTIVE', 'COMPLETED', 'TERMINATED')) DEFAULT 'ACTIVE', integrity_score INT DEFAULT 100, start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, end_time TIMESTAMP, duration INT, termination_reason VARCHAR(255), FOREIGN KEY (candidate_id) REFERENCES users(id));
+
+-- CREATE TABLE IF NOT EXISTS proctoring_sessions (id SERIAL PRIMARY KEY, interview_session_id INT NOT NULL, camera_active BOOLEAN DEFAULT TRUE, screen_shared BOOLEAN DEFAULT TRUE, started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (interview_session_id) REFERENCES interview_sessions(id));
+
+-- CREATE TABLE IF NOT EXISTS violations_log (id SERIAL PRIMARY KEY, candidate_id INT NOT NULL, interview_session_id INT NOT NULL, violation_type VARCHAR(255) NOT NULL, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (candidate_id) REFERENCES users(id), FOREIGN KEY (interview_session_id) REFERENCES interview_sessions(id));
+
+-- CREATE TABLE IF NOT EXISTS warnings_log (id SERIAL PRIMARY KEY, candidate_id INT NOT NULL, interview_session_id INT NOT NULL, warning_number INT NOT NULL, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (candidate_id) REFERENCES users(id), FOREIGN KEY (interview_session_id) REFERENCES interview_sessions(id));
+
+-- Migration: Update Interview Results table
+-- ALTER TABLE interview_results ADD COLUMN IF NOT EXISTS questions_asked INT DEFAULT 0;
+-- ALTER TABLE interview_results ADD COLUMN IF NOT EXISTS questions_answered INT DEFAULT 0;
+-- ALTER TABLE interview_results ADD COLUMN IF NOT EXISTS average_score DECIMAL(5,2);
+-- ALTER TABLE interview_results ADD COLUMN IF NOT EXISTS overall_score INT;
+-- ALTER TABLE interview_results ADD COLUMN IF NOT EXISTS ai_recommendation VARCHAR(50);
