@@ -1,4 +1,4 @@
-module.exports = function(io) {
+module.exports = function (io) {
   const adminNs = io.of('/admin');
   const candidateNs = io.of('/candidate');
 
@@ -38,12 +38,12 @@ module.exports = function(io) {
     });
 
     // WebRTC Signaling: Candidate to Admin
-    socket.on('webrtc-answer', ({ adminId, answer }) => {
-      adminNs.to(adminId).emit('webrtc-answer', { answer, candidateId: socket.id }); // Should use actual candidateId
+    socket.on('webrtc-answer', ({ adminId, answer, candidateId }) => {
+      adminNs.to(adminId).emit('webrtc-answer', { answer, candidateId });
     });
 
-    socket.on('webrtc-ice-candidate', ({ adminId, candidate }) => {
-      adminNs.to(adminId).emit('webrtc-ice-candidate', { candidate, candidateId: socket.id });
+    socket.on('webrtc-ice-candidate', ({ adminId, candidate, candidateId }) => {
+      adminNs.to(adminId).emit('webrtc-ice-candidate', { candidate, candidateId });
     });
 
     socket.on('disconnect', () => {
