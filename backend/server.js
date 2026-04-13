@@ -27,6 +27,7 @@ const jobRoutes = require('./routes/job.routes');
 const applicationRoutes = require('./routes/application.routes');
 const userRoutes = require('./routes/user.routes');
 const resumeRoutes = require('./routes/resumeRoutes');
+const proctoringRoutes = require('./routes/proctoring.routes');
 
 app.use('/auth', authRoutes);
 app.use('/admin', adminRoutes);
@@ -35,13 +36,31 @@ app.use('/jobs', jobRoutes);
 app.use('/applications', applicationRoutes);
 app.use('/users', userRoutes);
 app.use('/api/resume', resumeRoutes);
+app.use('/api/proctoring', proctoringRoutes); // New proctoring routes
 
 // Health check
 app.get('/', (req, res) => {
   res.json({ message: 'Job Platform API is running' });
 });
 
+const http = require('http');
+const { Server } = require('socket.io');
+
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*', // Allow both frontend origins (AI & Admin dashboards)
+    methods: ['GET', 'POST']
+  }
+});
+
+// Set io globally so controllers can use it
+app.set('io', io);
+
+// Initialize Socket.io services
+require('./services/proctoring.socket')(io);
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
